@@ -2,7 +2,7 @@
 using System.Globalization;
 using System.Windows.Data;
 
-namespace BMPLauncher
+namespace BMPLauncher.Core
 {
     public class CollectionToVisibilityConverter : IValueConverter
     {

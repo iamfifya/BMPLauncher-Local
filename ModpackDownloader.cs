@@ -8,7 +8,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace BMPLauncher
+namespace BMPLauncher.Core
 {
     public class ModpackDownloader
     {
@@ -17,7 +17,9 @@ namespace BMPLauncher
         private readonly HttpClient _httpClient;
         private List<CFModpack> _availableModpacks = new List<CFModpack>();
         private const int MAX_PARALLEL_DOWNLOADS = 6;
-        private const string API_KEY = "$2a$10$exoj8LP0e3YmndJrzmyM1ug2PNmk9jlZHxDfGJrAbURBZSgndnZZq";
+        private const string API_KEY = "$2a$10$VDISd51/SlrzXlwzKb5tEOAZBZMs6gKvJQsSiSD9Ey76ZFG6U1Mu6";
+
+
 
         public ModpackDownloader(string gameDirectory, Action<string> logAction)
         {
@@ -25,7 +27,16 @@ namespace BMPLauncher
             _logAction = logAction;
 
             _httpClient = new HttpClient();
-            _httpClient.DefaultRequestHeaders.Add("x-api-key", API_KEY);
+
+            // Попробуйте эти варианты заголовков:
+            // 1. Стандартный CurseForge ключ (публичный, но ограниченный)
+            //_httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+            // _httpClient.DefaultRequestHeaders.Add("User-Agent", "BMPLauncher/1.0");
+
+            // ИЛИ 2. Попробуйте без ключа (ограничение по запросам)
+             _httpClient.DefaultRequestHeaders.Clear();
+             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+
             _httpClient.Timeout = TimeSpan.FromSeconds(60);
         }
 
@@ -33,22 +44,50 @@ namespace BMPLauncher
         {
             try
             {
-                string url = $"https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&searchFilter={Uri.EscapeDataString(authorName)}&pageSize=50";
+                _logAction($"Загрузка модпаков автора: {authorName}");
+
+                // Ищем конкретно по названию автора (чувствительно к регистру)
+                string url = $"https://api.curseforge.com/v1/mods/search?gameId=432&classId=4471&sortField=2&sortOrder=desc&pageSize=50";
+
                 var response = await _httpClient.GetAsync(url);
 
                 if (response.IsSuccessStatusCode)
                 {
                     string json = await response.Content.ReadAsStringAsync();
+                    _logAction($"Получен ответ от API: {json.Length} символов");
+
                     var result = JsonConvert.DeserializeObject<CFSearchResponse>(json);
 
-                    _availableModpacks = result?.Data?.Where(m =>
-                        m.Authors?.Any(a => a.Name?.Equals(authorName, StringComparison.OrdinalIgnoreCase) == true) == true)
-                        .ToList() ?? new List<CFModpack>();
+                    if (result?.Data != null)
+                    {
+                        // Более гибкая фильтрация по автору
+                        _availableModpacks = result.Data
+                            .Where(m => m.Authors != null && m.Authors.Any(a =>
+                                !string.IsNullOrEmpty(a.Name) &&
+                                a.Name.Trim().Equals(authorName, StringComparison.OrdinalIgnoreCase)))
+                            .Take(20) // Ограничим количество для теста
+                            .ToList();
+
+                        _logAction($"Найдено модпаков по автору '{authorName}': {_availableModpacks.Count}");
+
+                        // Логируем найденных авторов для отладки
+                        if (_availableModpacks.Count == 0 && result.Data.Count > 0)
+                        {
+                            var allAuthors = result.Data
+                                .SelectMany(m => m.Authors ?? new List<CFAuthor>())
+                                .Select(a => a.Name)
+                                .Distinct()
+                                .Take(10);
+
+                            _logAction($"Примеры авторов в ответе: {string.Join(", ", allAuthors)}");
+                        }
+                    }
                 }
             }
             catch (Exception ex)
             {
                 _logAction($"Ошибка загрузки модпаков: {ex.Message}");
+                _availableModpacks = new List<CFModpack>();
             }
         }
 

@@ -9,7 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 
-namespace BMPLauncher
+namespace BMPLauncher.Core
 {
     public class MinecraftVersionManager
     {

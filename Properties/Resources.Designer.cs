@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace BMPLauncher.Properties {
+namespace BMPLauncher.Core.Properties {
     using System;
     
     

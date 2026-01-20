@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BMPLauncher
+namespace BMPLauncher.Core
 {
     // Модель для аккаунта Ely.by
     public class ElyAccountInfo
@@ -17,9 +17,14 @@ namespace BMPLauncher
         public string Email { get; set; }
 
         [JsonProperty("registeredAt")]
-        public DateTime RegisteredAt { get; set; }
+        public long RegisteredAtTimestamp { get; set; } // Изменено с DateTime на long
+
+        // Опциональное свойство для удобства
+        [JsonIgnore]
+        public DateTime RegisteredAt => DateTimeOffset.FromUnixTimeSeconds(RegisteredAtTimestamp).DateTime;
     }
 
+    // Аналогично для класса AccountInfo, если он используется
     public class AccountInfo
     {
         [JsonProperty("username")]
@@ -32,7 +37,10 @@ namespace BMPLauncher
         public string Email { get; set; }
 
         [JsonProperty("registeredAt")]
-        public DateTime RegisteredAt { get; set; }
+        public long RegisteredAtTimestamp { get; set; } // Изменено с DateTime на long
+
+        [JsonIgnore]
+        public DateTime RegisteredAt => DateTimeOffset.FromUnixTimeSeconds(RegisteredAtTimestamp).DateTime;
     }
 
     // Модель для токена

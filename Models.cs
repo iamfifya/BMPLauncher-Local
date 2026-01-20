@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace BMPLauncher
+namespace BMPLauncher.Core
 {
     // Java информация
     public class JavaInfo
@@ -17,7 +17,7 @@ namespace BMPLauncher
         }
     }
 
-namespace BMPLauncher
+namespace BMPLauncher.Core
     {
         // Модель для аккаунта Ely.by
         public class ElyAccountInfo

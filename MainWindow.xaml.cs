@@ -6,19 +6,22 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
-namespace BMPLauncher
+namespace BMPLauncher.Core
 {
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
@@ -217,6 +220,7 @@ namespace BMPLauncher
                 await Dispatcher.InvokeAsync(() =>
                 {
                     StatusText.Text = "Загрузка модпаков...";
+                    LogToConsole("Начинаем загрузку модпаков...");
                 });
 
                 await _modpackDownloader.LoadModpacksByAuthor("TheBarMaxx");
@@ -226,13 +230,29 @@ namespace BMPLauncher
                 {
                     ModpacksListBox.ItemsSource = _availableModpacks;
                     ModpackCountText.Text = $"({_availableModpacks.Count} модпаков)";
+
+                    if (_availableModpacks.Count == 0)
+                    {
+                        LogToConsole("⚠️ Не найдено модпаков. Проверьте API ключ и соединение.");
+                    }
+                    else
+                    {
+                        LogToConsole($"✅ Загружено {_availableModpacks.Count} модпаков");
+                        // Покажем первый модпак для проверки
+                        if (_availableModpacks.Count > 0)
+                        {
+                            LogToConsole($"Первый модпак: {_availableModpacks[0].Name}");
+                        }
+                    }
+
                     ModpacksLoaded = true;
                     StatusText.Text = "Готов";
                 });
             }
             catch (Exception ex)
             {
-                LogToConsole($"Ошибка загрузки модпаков: {ex.Message}");
+                LogToConsole($"❌ Критическая ошибка загрузки модпаков: {ex.Message}");
+                LogToConsole($"StackTrace: {ex.StackTrace}");
             }
             finally
             {

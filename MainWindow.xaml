@@ -1,14 +1,13 @@
-﻿<Window x:Class="BMPLauncher.MainWindow"
+﻿<Window x:Class="BMPLauncher.Core.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BMPLauncher.Core"
         mc:Ignorable="d"
-        Title="BMP Launcher - TheBarMaxx Edition"
-        Height="700"
-        Width="1100"
-        WindowStartupLocation="CenterScreen">
-
+        Title="MainWindow"
+        WindowState="Maximized"
+        Background="White">
     <Grid Background="#FF1E1E1E">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>

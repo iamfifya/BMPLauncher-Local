@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BMPLauncher
+namespace BMPLauncher.Core
 {
     // Классы для скачивания версий Minecraft
     public class MinecraftVersionManifest
