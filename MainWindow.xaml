@@ -42,8 +42,7 @@
                              Background="#FF3E3E42" Foreground="White" 
                              CaretBrush="White" BorderThickness="0"
                              TextChanged="PlayerNameTextBox_TextChanged"/>
-
-                    <!-- Выбор версии Minecraft -->
+                    <!--
                     <TextBlock Text="Версия Minecraft:" Foreground="#FFCCCCCC" Margin="0,10,0,5"/>
                     <ComboBox x:Name="VersionComboBox" Height="30" 
                               Background="#FF3E3E42" Foreground="White"
@@ -54,6 +53,7 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
+                    -->
 
                     <!-- Настройки Java -->
                     <TextBlock Text="Настройки Java:" FontWeight="Bold" Foreground="#FFCCCCCC" Margin="0,15,0,5"/>
@@ -130,10 +130,12 @@
 
                     <!-- Основные кнопки -->
                     <StackPanel Margin="0,10,0,0">
+                        <!--
                         <Button x:Name="DownloadButton" Content="СКАЧАТЬ ВЕРСИЮ" 
-                                Click="DownloadButton_Click" Height="40"
+                                <Click="DownloadButton_Click" Height="40"
                                 Background="#FF007ACC" Foreground="White"
                                 FontWeight="Bold" Margin="0,0,0,5"/>
+                        -->
 
                         <Button x:Name="LaunchButton" Content="ЗАПУСТИТЬ ИГРУ" 
                                 Click="LaunchButton_Click" Height="45"

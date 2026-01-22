@@ -74,7 +74,11 @@ namespace BMPLauncher.Core
             public string Snapshot { get; set; }
         }
 
-        // CurseForge модели
+        // Curse
+        //
+        //
+        //
+        // модели
         public class CFModpack
         {
             [JsonProperty("id")]
@@ -283,6 +287,68 @@ namespace BMPLauncher.Core
         }
     }
 
-    // Остальные существующие модели остаются без изменений...
-    // [остальной код из Models.cs]
+    // Добавьте эти классы в конец ElyAuth.cs или Models.cs
+    public class ModpackManifest
+    {
+        [JsonProperty("minecraft")]
+        public MinecraftInfo Minecraft { get; set; }
+
+        [JsonProperty("manifestType")]
+        public string ManifestType { get; set; }
+
+        [JsonProperty("manifestVersion")]
+        public int ManifestVersion { get; set; }
+
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        [JsonProperty("version")]
+        public string Version { get; set; }
+
+        [JsonProperty("author")]
+        public string Author { get; set; }
+
+        [JsonProperty("files")]
+        public List<ModFile> Files { get; set; }
+
+        [JsonProperty("overrides")]
+        public string Overrides { get; set; }
+    }
+
+    public class MinecraftInfo
+    {
+        [JsonProperty("version")]
+        public string Version { get; set; }
+
+        [JsonProperty("modLoaders")]
+        public List<ModLoader> ModLoaders { get; set; }
+    }
+
+    public class ModLoader
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
+
+        [JsonProperty("primary")]
+        public bool Primary { get; set; }
+    }
+
+    public class ModFile
+    {
+        [JsonProperty("projectID")]
+        public int ProjectId { get; set; }
+
+        [JsonProperty("fileID")]
+        public int FileId { get; set; }
+
+        [JsonProperty("required")]
+        public bool Required { get; set; }
+    }
+    public class ForgeVersionInfo
+    {
+        public string MinecraftVersion { get; set; }
+        public string Version { get; set; } // Например "36.2.34" - изменили с ForgeVersion на Version
+        public string InstallerUrl { get; set; }
+        public bool IsInstalled { get; set; }
+    }
 }

@@ -1,4 +1,6 @@
-﻿using Microsoft.Win32;
+﻿using CmlLib.Core;
+using CmlLib.Core.Installer.Forge;
+using Microsoft.Win32;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -6,20 +8,17 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
 
 namespace BMPLauncher.Core
 {
@@ -44,6 +43,13 @@ namespace BMPLauncher.Core
         private CFModpack _selectedModpack;
         private CancellationTokenSource _cancellationTokenSource;
         private bool _isClosing = false;
+        private readonly Action<string> _logAction;
+
+        private ForgeInstaller _forgeInstaller;
+        private GameLauncher _gameLauncher;
+
+        private MinecraftLauncher _cmlLauncher;
+        private MinecraftPath _minecraftPath;
 
         // Менеджеры
         private VersionDownloader _versionDownloader;
@@ -53,6 +59,18 @@ namespace BMPLauncher.Core
         private bool _modpacksLoaded = false;
         private bool _isLoadingModpacks = false;
         public event PropertyChangedEventHandler PropertyChanged;
+
+        private string _sanitizedModpackName;
+
+        private void ModpackSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            _selectedModpack = ModpacksListBox.SelectedItem as CFModpack;
+            if (_selectedModpack != null)
+            {
+                _sanitizedModpackName = SanitizeFileName(_selectedModpack.Name);
+                LogToConsole($"Выбран модпак: {_selectedModpack.Name} (папка: {_sanitizedModpackName})");
+            }
+        }
 
         public bool ModpacksLoaded
         {
@@ -97,82 +115,149 @@ namespace BMPLauncher.Core
             {
                 InitializeComponent();
 
+                _minecraftPath = new MinecraftPath(GameDirectory);
+                _cmlLauncher = new MinecraftLauncher(_minecraftPath);
+
+                // Инициализируем лог сразу
+                LogToConsole("Инициализация лаунчера...");
+
+                _gameLauncher = new GameLauncher(GameDirectory, LogToConsole);
+
                 // Инициализируем CancellationTokenSource
                 _cancellationTokenSource = new CancellationTokenSource();
                 _isClosing = false;
 
-                // Инициализируем настройки
-                _settings = LauncherSettings.Load();
+                // ВАЖНО: Сначала устанавливаем путь по умолчанию
+                BaseDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "BMPLauncher");
+                GameDirectory = BaseDirectory;
 
-                if (_settings == null)
+                LogToConsole($"Базовый путь: {BaseDirectory}");
+
+                // Пробуем загрузить настройки
+                try
                 {
+                    _settings = LauncherSettings.Load();
+                    LogToConsole("Настройки загружены");
+                }
+                catch (Exception ex)
+                {
+                    LogToConsole($"Ошибка загрузки настроек: {ex.Message}");
+                    _settings = null;
+                }
+
+                // Если настройки не загрузились или GameDirectory пустое - создаем новые
+                if (_settings == null || string.IsNullOrEmpty(_settings.GameDirectory))
+                {
+                    LogToConsole("Создаем новые настройки");
                     _settings = new LauncherSettings();
-                    BaseDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BMPLauncher");
                     _settings.GameDirectory = BaseDirectory;
-                    GameDirectory = BaseDirectory;
+
+                    // Используем путь из настроек
+                    GameDirectory = _settings.GameDirectory;
+
+                    // Сохраняем сразу
                     _settings.Save();
+                    LogToConsole($"Сохранен GameDirectory: {GameDirectory}");
                 }
                 else
                 {
-                    BaseDirectory = _settings.GameDirectory;
-                    GameDirectory = BaseDirectory;
+                    // Используем сохраненный путь
+                    GameDirectory = _settings.GameDirectory;
+                    LogToConsole($"Используем сохраненный GameDirectory: {GameDirectory}");
                 }
 
-                // Создаем базовую структуру папок
-                Directory.CreateDirectory(BaseDirectory);
-                Directory.CreateDirectory(Path.Combine(BaseDirectory, "versions"));
+                // Создаем базовую структуру папок (если не существует)
+                try
+                {
+                    Directory.CreateDirectory(GameDirectory);
+                    Directory.CreateDirectory(Path.Combine(GameDirectory, "versions"));
+                    Directory.CreateDirectory(Path.Combine(GameDirectory, "modpacks"));
+                    LogToConsole("Структура папок создана");
+                }
+                catch (Exception ex)
+                {
+                    LogToConsole($"Ошибка создания папок: {ex.Message}");
+                    // Продолжаем работу
+                }
 
-                // Инициализируем менеджеры
-                _versionDownloader = new VersionDownloader(GameDirectory, LogToConsole);
-                _modpackDownloader = new ModpackDownloader(GameDirectory, LogToConsole);
+                // ТОЛЬКО ПОСЛЕ ЭТОГО инициализируем менеджеры
+                try
+                {
+                    LogToConsole("Инициализация менеджеров...");
+                    _versionDownloader = new VersionDownloader(GameDirectory, LogToConsole);
+                    _modpackDownloader = new ModpackDownloader(GameDirectory, LogToConsole);
+                    LogToConsole("Менеджеры инициализированы");
+                }
+                catch (Exception ex)
+                {
+                    LogToConsole($"Ошибка инициализации менеджеров: {ex.Message}");
+                    throw; // Прерываем инициализацию
+                }
 
                 // Восстанавливаем настройки
-                RestoreSettings();
+                try
+                {
+                    RestoreSettings();
+                    LogToConsole("Настройки восстановлены");
+                }
+                catch (Exception ex)
+                {
+                    LogToConsole($"Ошибка восстановления настроек: {ex.Message}");
+                }
+
+                _gameLauncher = new GameLauncher(GameDirectory, LogToConsole);
+
                 LogToConsole("Лаунчер инициализирован успешно!");
 
-                // Используем Task.Run для асинхронных операций
-                Task.Run(async () => await LoadVersionsAsync());
-                Task.Run(async () => await LoadModpacksAutomatically());
+                // Асинхронная загрузка модпаков
+                Task.Run(async () =>
+                {
+                    await Task.Delay(1000); // Небольшая задержка для отображения UI
+                    await LoadModpacksAutomatically();
+                });
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка инициализации: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                // Резервная инициализация
-                _settings = new LauncherSettings();
-                BaseDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BMPLauncher");
-                GameDirectory = BaseDirectory;
-                Directory.CreateDirectory(BaseDirectory);
-                Directory.CreateDirectory(Path.Combine(BaseDirectory, "versions"));
+                string errorMsg = $"Ошибка инициализации: {ex.Message}\nStackTrace: {ex.StackTrace}";
+                LogToConsole(errorMsg);
+
+                MessageBox.Show($"Ошибка инициализации: {ex.Message}\n\nПроверьте права доступа к папке AppData.",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+
+                // Пробуем использовать временную папку
+                try
+                {
+                    BaseDirectory = Path.GetTempPath() + "BMPLauncher";
+                    GameDirectory = BaseDirectory;
+
+                    Directory.CreateDirectory(BaseDirectory);
+                    Directory.CreateDirectory(Path.Combine(BaseDirectory, "versions"));
+
+                    _versionDownloader = new VersionDownloader(GameDirectory, LogToConsole);
+                    _modpackDownloader = new ModpackDownloader(GameDirectory, LogToConsole);
+
+                    LogToConsole($"Используем временную папку: {BaseDirectory}");
+                }
+                catch (Exception ex2)
+                {
+                    LogToConsole($"Критическая ошибка: {ex2.Message}");
+                    System.Windows.Application.Current.Shutdown();
+                }
             }
         }
 
         private void LogToConsole(string message)
         {
-            Dispatcher.BeginInvoke(new Action(() =>
+            if (!Dispatcher.CheckAccess())
             {
-                ConsoleOutput.Text += message + "\n";
-                ConsoleOutput.ScrollToEnd();
-            }));
-        }
-
-        private async Task LoadVersionsAsync()
-        {
-            try
-            {
-                _versionManifest = await _versionDownloader.GetVersionManifestAsync();
-
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    VersionComboBox.ItemsSource = _versionManifest.Versions;
-                    if (_versionManifest.Versions.Count > 0)
-                        VersionComboBox.SelectedIndex = 0;
-                    LogToConsole($"Загружено {_versionManifest.Versions.Count} версий");
-                });
+                Dispatcher.Invoke(() => LogToConsole(message));
+                return;
             }
-            catch (Exception ex)
-            {
-                LogToConsole($"Ошибка загрузки версий: {ex.Message}");
-            }
+
+            ConsoleOutput.Text += message + "\n";
+            ConsoleOutput.ScrollToEnd();
         }
 
         private async Task WriteResponse(HttpListenerResponse response, string responseText)
@@ -219,30 +304,25 @@ namespace BMPLauncher.Core
             {
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    StatusText.Text = "Загрузка модпаков...";
-                    LogToConsole("Начинаем загрузку модпаков...");
+                    StatusText.Text = "Загрузка модпаков TheBarMaxx...";
                 });
 
-                await _modpackDownloader.LoadModpacksByAuthor("TheBarMaxx");
+                // ЗДЕСЬ ПРОСТО ЗАГРУЖАЕМ МОДПАКИ THEBARMAXX - БЕЗ ФИЛЬТРАЦИИ
+                await _modpackDownloader.LoadTheBarMaxxModpacks();
                 _availableModpacks = _modpackDownloader.GetAvailableModpacks();
 
                 await Dispatcher.InvokeAsync(() =>
                 {
                     ModpacksListBox.ItemsSource = _availableModpacks;
-                    ModpackCountText.Text = $"({_availableModpacks.Count} модпаков)";
+                    ModpackCountText.Text = $"({_availableModpacks.Count} модпаков TheBarMaxx)";
 
                     if (_availableModpacks.Count == 0)
                     {
-                        LogToConsole("⚠️ Не найдено модпаков. Проверьте API ключ и соединение.");
+                        LogToConsole("⚠️ Не загружены модпаки TheBarMaxx");
                     }
                     else
                     {
-                        LogToConsole($"✅ Загружено {_availableModpacks.Count} модпаков");
-                        // Покажем первый модпак для проверки
-                        if (_availableModpacks.Count > 0)
-                        {
-                            LogToConsole($"Первый модпак: {_availableModpacks[0].Name}");
-                        }
+                        LogToConsole($"✅ Загружено {_availableModpacks.Count} модпаков TheBarMaxx");
                     }
 
                     ModpacksLoaded = true;
@@ -251,8 +331,7 @@ namespace BMPLauncher.Core
             }
             catch (Exception ex)
             {
-                LogToConsole($"❌ Критическая ошибка загрузки модпаков: {ex.Message}");
-                LogToConsole($"StackTrace: {ex.StackTrace}");
+                LogToConsole($"❌ Ошибка загрузки модпаков: {ex.Message}");
             }
             finally
             {
@@ -262,7 +341,7 @@ namespace BMPLauncher.Core
 
         private void SearchModpacksButton_Click(object sender, RoutedEventArgs e)
         {
-            Task.Run(() => SearchModpacks(SearchModpackTextBox.Text));
+            // Task.Run(() => SearchModpacks(SearchModpackTextBox.Text));
         }
 
         private void SearchModpackTextBox_KeyDown(object sender, KeyEventArgs e)
@@ -294,14 +373,7 @@ namespace BMPLauncher.Core
             });
         }
 
-        private void ModpackSelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            _selectedModpack = ModpacksListBox.SelectedItem as CFModpack;
-            if (_selectedModpack != null)
-            {
-                LogToConsole($"Выбран модпак: {_selectedModpack.Name}");
-            }
-        }
+
 
         private async void InstallModpack_Click(object sender, RoutedEventArgs e)
         {
@@ -318,7 +390,22 @@ namespace BMPLauncher.Core
             {
                 StatusText.Text = $"Установка {_selectedModpack.Name}...";
 
-                string modpackDir = Path.Combine(GameDirectory, "modpacks", _selectedModpack.Name);
+                // ДИАГНОСТИКА: показываем информацию о модпаке
+                LogToConsole($"=== ИНФОРМАЦИЯ О МОДПАКЕ ===");
+                LogToConsole($"ID: {_selectedModpack.Id}");
+                LogToConsole($"Имя: {_selectedModpack.Name}");
+                LogToConsole($"FileId: {_selectedModpack.GameVersionLatestFiles?.FirstOrDefault()?.ProjectFileId ?? 0}");
+                LogToConsole($"Имя файла: {_selectedModpack.GameVersionLatestFiles?.FirstOrDefault()?.ProjectFileName}");
+                LogToConsole($"============================");
+
+                // УДАЛЯЕМ КВАДРАТНЫЕ СКОБКИ И ДРУГИЕ НЕДОПУСТИМЫЕ СИМВОЛЫ ИЗ ИМЕНИ ПАПКИ
+                string sanitizedModpackName = SanitizeFileName(_selectedModpack.Name);
+                string modpackDir = Path.Combine(GameDirectory, "modpacks", sanitizedModpackName);
+
+                LogToConsole($"Оригинальное имя: {_selectedModpack.Name}");
+                LogToConsole($"Очищенное имя: {sanitizedModpackName}");
+                LogToConsole($"Путь установки: {modpackDir}");
+
                 await _modpackDownloader.DownloadModpackAsync(_selectedModpack.Id, modpackDir,
                     progress => Dispatcher.BeginInvoke(new Action(() => DownloadProgress.Value = progress)),
                     _cancellationTokenSource.Token);
@@ -328,6 +415,7 @@ namespace BMPLauncher.Core
             catch (Exception ex)
             {
                 LogToConsole($"Ошибка установки: {ex.Message}");
+                LogToConsole($"StackTrace: {ex.StackTrace}");
                 MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
@@ -338,97 +426,234 @@ namespace BMPLauncher.Core
             }
         }
 
-        private async void DownloadButton_Click(object sender, RoutedEventArgs e)
+        // Метод для очистки имени файла/папки от недопустимых символов
+        private string SanitizeFileName(string fileName)
         {
-            var version = VersionComboBox.SelectedItem as MCVersion;
-            if (version == null)
+            if (string.IsNullOrEmpty(fileName))
+                return "Modpack";
+
+            // Удаляем квадратные скобки и другие недопустимые символы
+            string invalidChars = new string(Path.GetInvalidFileNameChars()) + "[]";
+            string sanitized = fileName;
+
+            foreach (char c in invalidChars)
             {
-                MessageBox.Show("Выберите версию!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
+                sanitized = sanitized.Replace(c.ToString(), "");
             }
 
-            DownloadButton.IsEnabled = false;
-            StatusText.Text = $"Скачивание {version.Id}...";
+            // Убираем лишние пробелы
+            sanitized = sanitized.Trim();
 
-            try
-            {
-                await _versionDownloader.DownloadVersionAsync(version.Id,
-                    progress => Dispatcher.BeginInvoke(new Action(() => DownloadProgress.Value = progress)),
-                    _cancellationTokenSource.Token);
+            // Если после очистки строка пустая, задаем имя по умолчанию
+            if (string.IsNullOrEmpty(sanitized))
+                sanitized = "Modpack_" + Guid.NewGuid().ToString().Substring(0, 8);
 
-                MessageBox.Show($"Версия скачана!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
+            return sanitized;
+        }
+
+
+
+
+
+
+
+
+
+        private async Task DownloadMinecraftVersionAsync(string version)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+
+            await Dispatcher.InvokeAsync(async () =>
             {
-                LogToConsole($"Ошибка скачивания: {ex.Message}");
-                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
+                try
+                {
+                    var downloader = new VersionDownloader(GameDirectory, (msg) =>
+                    {
+                        Dispatcher.Invoke(() => LogToConsole(msg));
+                    });
+
+                    await downloader.DownloadVersionAsync(version,
+                        progress => LogToConsole($"Прогресс скачивания: {progress}%"),
+                        new CancellationToken());
+
+                    tcs.SetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            });
+
+            await tcs.Task;
+        }
+
+
+
+
+
+
+
+
+
+        private string TryFindJava8()
+        {
+            // Список мест, где обычно живет Java 8
+            string[] commonPaths = {
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Java"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Java"),
+        @"D:\Program Files\Java" // Твой случай из прошлых логов
+    };
+
+            foreach (var baseDir in commonPaths)
             {
-                DownloadButton.IsEnabled = true;
-                StatusText.Text = "Готов";
-                DownloadProgress.Value = 0;
+                if (Directory.Exists(baseDir))
+                {
+                    // Ищем папки jre1.8 или jdk1.8
+                    var javaDirs = Directory.GetDirectories(baseDir, "*1.8*");
+                    foreach (var dir in javaDirs)
+                    {
+                        string exePath = Path.Combine(dir, "bin", "java.exe");
+                        if (File.Exists(exePath)) return exePath;
+                    }
+                }
             }
+            return null;
         }
 
         private async void LaunchButton_Click(object sender, RoutedEventArgs e)
         {
-            var version = VersionComboBox.SelectedItem as MCVersion;
-            if (version == null)
-            {
-                MessageBox.Show("Выберите версию!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-
-            string playerName = PlayerNameTextBox.Text.Trim();
-            if (string.IsNullOrEmpty(playerName))
-            {
-                MessageBox.Show("Введите имя игрока!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-
-            string javaPath = JavaPathTextBox.Text.Trim();
-            if (string.IsNullOrEmpty(javaPath) || !File.Exists(javaPath))
-            {
-                MessageBox.Show("Укажите путь к Java!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-
-            LaunchButton.IsEnabled = false;
-            StatusText.Text = "Запуск...";
-
             try
             {
-                string xms = (XmsComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "1G";
-                string xmx = (XmxComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "2G";
-                string javaArgs = JavaArgsTextBox.Text.Trim();
+                // Блокируем кнопку на время запуска
+                LaunchButton.IsEnabled = false;
+                StatusText.Text = "Запуск игры...";
 
-                string versionDir = Path.Combine(GameDirectory, "versions", version.Id);
-                string jarPath = Path.Combine(versionDir, $"{version.Id}.jar");
+                LogToConsole("=== ЗАПУСК ИГРЫ ===");
 
-                if (!File.Exists(jarPath))
+                // 1. Проверяем выбор модпака
+                if (_selectedModpack == null)
                 {
-                    var result = MessageBox.Show("Версия не скачана. Скачать сейчас?", "Вопрос",
-                        MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    MessageBox.Show("Выберите модпак из списка!");
+                    return;
+                }
 
-                    if (result == MessageBoxResult.Yes)
+                // 2. Получаем путь к модпаку
+                string sanitizedModpackName = SanitizeFileName(_selectedModpack.Name);
+                string modpackDir = Path.Combine(GameDirectory, "modpacks", sanitizedModpackName);
+
+                if (!Directory.Exists(modpackDir))
+                {
+                    MessageBox.Show($"Модпак '{_selectedModpack.Name}' не установлен!\n\n" +
+                                  "Сначала нажмите кнопку 'Установить'.",
+                                  "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // 3. Читаем manifest.json
+                string manifestPath = Path.Combine(modpackDir, "manifest.json");
+                if (!File.Exists(manifestPath))
+                {
+                    MessageBox.Show("Файл manifest.json не найден!\n" +
+                                  "Модпак установлен неправильно.",
+                                  "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var manifest = JsonConvert.DeserializeObject<CFManifest>(File.ReadAllText(manifestPath));
+
+                LogToConsole($"📋 Модпак: {_selectedModpack.Name}");
+                LogToConsole($"🎮 Minecraft: {manifest.Minecraft.Version}");
+                LogToConsole($"🔨 Forge: {manifest.Minecraft.ModLoaders?.FirstOrDefault()?.Id ?? "Нет"}");
+
+                // 4. Получаем Java путь
+                string javaPath = await GetJavaPathAsync();
+                if (string.IsNullOrEmpty(javaPath))
+                {
+                    MessageBox.Show("Java не найдена!\n\n" +
+                                  "1. Установите Java 8 или новее\n" +
+                                  "2. Укажите путь в настройках\n" +
+                                  "3. Или установите переменную окружения JAVA_HOME",
+                                  "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // 5. Получаем имя игрока
+                string playerName = string.IsNullOrWhiteSpace(PlayerNameTextBox.Text)
+                    ? "Player_" + Guid.NewGuid().ToString().Substring(0, 5)
+                    : PlayerNameTextBox.Text;
+
+                // 6. Получаем настройки RAM
+                int minRam = ParseRamToMb(GetSelectedComboBoxValue(XmsComboBox) ?? "1G");
+                int maxRam = ParseRamToMb(GetSelectedComboBoxValue(XmxComboBox) ?? "2G");
+
+                // 7. Получаем аргументы Java
+                string javaArgs = JavaArgsTextBox.Text?.Trim() ?? "";
+
+                // 8. Запускаем через GameLauncher
+                var process = await _gameLauncher.LaunchModpackAsync(
+                    modpackDir: modpackDir,
+                    minecraftVersion: manifest.Minecraft.Version,
+                    forgeVersion: manifest.Minecraft.ModLoaders?.FirstOrDefault()?.Id,
+                    javaPath: javaPath,
+                    playerName: playerName,
+                    minRamMb: minRam,
+                    maxRamMb: maxRam,
+                    javaArgs: javaArgs
+                );
+
+                // 9. Запускаем процесс
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                LogToConsole($"✅ Игра запущена! PID: {process.Id}");
+
+                // Сообщение об успехе
+                MessageBox.Show($"Игра успешно запущена!\n\n" +
+                               $"PID: {process.Id}\n" +
+                               $"Игрок: {playerName}\n" +
+                               $"RAM: {minRam / 1024}G - {maxRam / 1024}G\n\n" +
+                               "Консоль игры будет отображаться ниже.",
+                               "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                // 10. Следим за завершением игры в фоне
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(5000); // Ждем 5 секунд для инициализации
+
+                    if (process.HasExited)
                     {
-                        await _versionDownloader.DownloadVersionAsync(version.Id,
-                            progress => Dispatcher.BeginInvoke(new Action(() => DownloadProgress.Value = progress)),
-                            _cancellationTokenSource.Token);
+                        Dispatcher.Invoke(() =>
+                        {
+                            LogToConsole($"⚠️ Игра завершилась. Код: {process.ExitCode}");
+                            StatusText.Text = "Готов";
+                        });
                     }
                     else
                     {
-                        return;
-                    }
-                }
+                        Dispatcher.Invoke(() =>
+                        {
+                            LogToConsole($"🎮 Игра работает (PID: {process.Id})");
+                            StatusText.Text = "Игра запущена";
+                        });
 
-                LaunchGame(javaPath, version.Id, playerName, xms, xmx, javaArgs);
+                        await process.WaitForExitAsync();
+                        Dispatcher.Invoke(() =>
+                        {
+                            LogToConsole($"🎮 Игра завершена. Код: {process.ExitCode}");
+                            StatusText.Text = "Готов";
+                        });
+                    }
+                });
             }
             catch (Exception ex)
             {
-                LogToConsole($"Ошибка запуска: {ex.Message}");
-                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                LogToConsole($"❌ Ошибка: {ex.Message}");
+                if (ex.InnerException != null)
+                    LogToConsole($"Подробности: {ex.InnerException.Message}");
+
+                MessageBox.Show($"Ошибка запуска: {ex.Message}",
+                              "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -436,35 +661,106 @@ namespace BMPLauncher.Core
                 StatusText.Text = "Готов";
             }
         }
-
-        private void LaunchGame(string javaPath, string versionId, string playerName, string xms, string xmx, string javaArgs)
+        private async Task<string> GetJavaPathAsync()
         {
-            try
+            // 1. Проверяем сохраненный путь
+            if (!string.IsNullOrEmpty(_settings?.JavaPath) && File.Exists(_settings.JavaPath))
             {
-                string versionDir = Path.Combine(GameDirectory, "versions", versionId);
-                string jarPath = Path.Combine(versionDir, $"{versionId}.jar");
-                string uuid = Guid.NewGuid().ToString();
+                return _settings.JavaPath;
+            }
 
-                string arguments = $"-Xms{xms} -Xmx{xmx} {javaArgs} -jar \"{jarPath}\" " +
-                    $"--username {playerName} --uuid {uuid} --accessToken 0 " +
-                    $"--version {versionId} --gameDir \"{versionDir}\"";
+            // 2. Автопоиск через JavaHelper
+            var javaInfo = JavaHelper.FindJava();
+            if (javaInfo != null)
+            {
+                _settings.JavaPath = javaInfo.Path;
+                _settings.Save();
+                return javaInfo.Path;
+            }
 
-                Process.Start(new ProcessStartInfo
+            // 3. Пробуем стандартные пути
+            string[] commonPaths =
+            {
+                @"D:\Program Files\Java\jre1.8.0_431\bin\java.exe",
+                @"C:\Program Files\Java\jre1.8.0_431\bin\java.exe",
+                @"C:\Program Files (x86)\Java\jre1.8.0_431\bin\java.exe",
+                @"C:\Program Files\Java\jdk1.8.0_431\bin\java.exe",
+                @"java.exe" // Пробуем из PATH
+            };
+
+            foreach (var path in commonPaths)
+            {
+                if (File.Exists(path))
                 {
-                    FileName = javaPath,
-                    Arguments = arguments,
-                    WorkingDirectory = versionDir,
-                    UseShellExecute = false
-                });
+                    _settings.JavaPath = path;
+                    _settings.Save();
+                    return path;
+                }
+            }
 
-                LogToConsole("Minecraft запущен!");
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Не удалось запустить игру: {ex.Message}");
-            }
+            return null;
         }
 
+        private int ParseRamToMb(string ramString)
+        {
+            if (string.IsNullOrWhiteSpace(ramString)) return 1024;
+
+            ramString = ramString.ToUpper().Trim();
+
+            // Убираем пробелы
+            ramString = ramString.Replace(" ", "");
+
+            if (ramString.EndsWith("G"))
+            {
+                if (int.TryParse(ramString.TrimEnd('G'), out int gb))
+                    return gb * 1024;
+            }
+            else if (ramString.EndsWith("M"))
+            {
+                if (int.TryParse(ramString.TrimEnd('M'), out int mb))
+                    return mb;
+            }
+            else if (int.TryParse(ramString, out int value))
+            {
+                return value;
+            }
+
+            return 1024; // 1GB по умолчанию
+        }
+
+        private string GetSelectedComboBoxValue(ComboBox comboBox)
+        {
+            if (comboBox.SelectedItem is ComboBoxItem item)
+                return item.Content?.ToString();
+
+            return comboBox.Text;
+        }
+
+
+        // Вспомогательный метод для логов
+        private void AttachProcessLogger(Process process)
+        {
+            process.OutputDataReceived += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                    LogToConsole($"[Game]: {e.Data}");
+            };
+            process.ErrorDataReceived += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                    LogToConsole($"[ERR]: {e.Data}");
+            };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+        }
+
+        private async Task DownloadFileAsync(string url, string path)
+        {
+            using (var client = new WebClient())
+            {
+                await client.DownloadFileTaskAsync(new Uri(url), path);
+            }
+        }
         private void AutoDetectJava()
         {
             _currentJavaInfo = JavaHelper.FindJava();
@@ -514,11 +810,33 @@ namespace BMPLauncher.Core
 
         private void RestoreSettings()
         {
-            if (_settings == null) return;
+            if (_settings == null)
+            {
+                LogToConsole("Настройки не загружены, пропускаем восстановление");
+                return;
+            }
 
-            JavaPathTextBox.Text = _settings.JavaPath ?? "";
-            PlayerNameTextBox.Text = _settings.PlayerName ?? "";
-            JavaArgsTextBox.Text = _settings.JavaArgs ?? "";
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    JavaPathTextBox.Text = _settings.JavaPath ?? "";
+                    PlayerNameTextBox.Text = _settings.PlayerName ?? "";
+                    JavaArgsTextBox.Text = _settings.JavaArgs ?? "";
+
+                    // Автоопределение Java если путь пустой
+                    if (string.IsNullOrEmpty(JavaPathTextBox.Text))
+                    {
+                        AutoDetectJava();
+                    }
+                });
+
+                LogToConsole("Настройки восстановлены");
+            }
+            catch (Exception ex)
+            {
+                LogToConsole($"Ошибка восстановления настроек: {ex.Message}");
+            }
         }
 
         private void SaveSettings()
@@ -617,7 +935,7 @@ namespace BMPLauncher.Core
                 ConsoleOutput.Text += "   📧 Email: " + _currentProfile.Email + "\n";
                 ConsoleOutput.Text += "=== Авторизация завершена ===\n";
 
-                CreateElyByLaunchProfile(VersionComboBox.SelectedItem?.ToString() ?? "1.21.11-pre3");
+                // CreateElyByLaunchProfile(VersionComboBox.SelectedItem?.ToString() ?? "1.21.11-pre3");
             }
             catch (Exception ex)
             {
@@ -854,5 +1172,17 @@ namespace BMPLauncher.Core
             }
         }
 
+        private string GenerateClasspath(string librariesDir, string minecraftJarPath)
+        {
+            if (!Directory.Exists(librariesDir)) return minecraftJarPath;
+
+            // Собираем все .jar файлы из папки libraries и подпапок
+            var files = Directory.GetFiles(librariesDir, "*.jar", SearchOption.AllDirectories);
+
+            // Объединяем их через ; (разделитель для Windows)
+            string classpath = string.Join(";", files);
+
+            return $"{classpath};{minecraftJarPath}";
+        }
     }
 }
