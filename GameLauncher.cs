@@ -14,27 +14,22 @@ namespace BMPLauncher.Core
     {
         private readonly string _gameDirectory;
         private readonly Action<string> _logAction;
-        private MinecraftLauncher _launcher;
-        private MinecraftPath _minecraftPath;
+        private readonly MinecraftLauncher _launcher;
+        private readonly MinecraftPath _minecraftPath;
 
         public GameLauncher(string gameDirectory, Action<string> logAction)
         {
             _gameDirectory = gameDirectory;
             _logAction = logAction;
-            Initialize();
-        }
-
-        private void Initialize()
-        {
             _minecraftPath = new MinecraftPath(_gameDirectory);
             _launcher = new MinecraftLauncher(_minecraftPath);
 
-            // Настраиваем прогресс (правильное событие для версии 4.0.6)
-            _launcher.ProgressChanged += (sender, e) =>
+            // Правильные события для версии 4.0.6
+            _launcher.FileProgressChanged += (sender, e) =>
             {
-                if (e is DownloadFileChangedEventArgs downloadArgs)
+                if (e.TotalTasks > 0)
                 {
-                    _logAction?.Invoke($"Загрузка: {downloadArgs.FileName} ({downloadArgs.ProgressPercentage}%)");
+                    _logAction?.Invoke($"Загрузка: {e.ProgressedTasks}/{e.TotalTasks} файлов");
                 }
             };
         }
@@ -68,41 +63,51 @@ namespace BMPLauncher.Core
                     Path = _minecraftPath
                 };
 
-                // Устанавливаем Java путь если указан
+                // Устанавливаем Java путь
                 if (!string.IsNullOrEmpty(javaPath) && File.Exists(javaPath))
                 {
                     launchOption.JavaPath = javaPath;
                 }
-
-                // Добавляем дополнительные аргументы Java
-                if (!string.IsNullOrEmpty(javaArgs))
-                {
-                    // В 4.0.6 дополнительные аргументы добавляются через StartOption
-                    launchOption.StartOption.AdditionalJavaArguments = javaArgs;
-                }
-
-                // Устанавливаем рабочую директорию (GameDirectory) - это важно!
-                launchOption.StartOption.WorkingDirectory = modpackDir;
 
                 _logAction?.Invoke($"⚙️ Создаем процесс для версии: {versionName}");
 
                 // Создаем процесс
                 var process = await _launcher.CreateProcessAsync(versionName, launchOption);
 
+                // Устанавливаем рабочую директорию
+                process.StartInfo.WorkingDirectory = modpackDir;
+
+                // Добавляем дополнительные аргументы Java
+                if (!string.IsNullOrEmpty(javaArgs))
+                {
+                    process.StartInfo.Arguments = $"{javaArgs} {process.StartInfo.Arguments}";
+                }
+
                 // Настраиваем логирование
-                SetupProcessLogging(process);
+                process.StartInfo.RedirectStandardOutput = true;
+                process.StartInfo.RedirectStandardError = true;
+                process.StartInfo.UseShellExecute = false;
+                process.StartInfo.CreateNoWindow = false;
+
+                process.OutputDataReceived += (s, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                        _logAction?.Invoke($"[Game] {e.Data}");
+                };
+
+                process.ErrorDataReceived += (s, e) =>
+                {
+                    if (!string.IsNullOrEmpty(e.Data))
+                        _logAction?.Invoke($"[Error] {e.Data}");
+                };
 
                 _logAction?.Invoke("🎮 Запускаем игру...");
 
                 return process;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _logAction?.Invoke($"❌ Ошибка запуска: {ex.Message}");
-                if (ex.InnerException != null)
-                {
-                    _logAction?.Invoke($"Детали: {ex.InnerException.Message}");
-                }
+                _logAction?.Invoke("❌ Ошибка при создании процесса");
                 throw;
             }
         }
@@ -128,13 +133,12 @@ namespace BMPLauncher.Core
                         versionName = await forgeInstaller.Install(minecraftVersion, forgeVersionNumber);
                     }
 
-                    _logAction?.Invoke($"✅ Forge готов: {versionName}");
                     return versionName;
                 }
-                catch (Exception ex)
+                catch
                 {
-                    _logAction?.Invoke($"⚠️ Не удалось установить Forge: {ex.Message}");
-                    return minecraftVersion; // Возвращаем ванильную версию
+                    _logAction?.Invoke("⚠️ Не удалось установить Forge, используем ванильную версию");
+                    return minecraftVersion;
                 }
             }
 
@@ -145,26 +149,6 @@ namespace BMPLauncher.Core
         {
             string versionDir = Path.Combine(_gameDirectory, "versions", versionName);
             return Directory.Exists(versionDir);
-        }
-
-        private void SetupProcessLogging(Process process)
-        {
-            process.StartInfo.RedirectStandardOutput = true;
-            process.StartInfo.RedirectStandardError = true;
-            process.StartInfo.UseShellExecute = false;
-            process.StartInfo.CreateNoWindow = false; // Окно будет видно!
-
-            process.OutputDataReceived += (s, e) =>
-            {
-                if (!string.IsNullOrEmpty(e.Data))
-                    _logAction?.Invoke($"[Game] {e.Data}");
-            };
-
-            process.ErrorDataReceived += (s, e) =>
-            {
-                if (!string.IsNullOrEmpty(e.Data))
-                    _logAction?.Invoke($"[Error] {e.Data}");
-            };
         }
     }
 }
