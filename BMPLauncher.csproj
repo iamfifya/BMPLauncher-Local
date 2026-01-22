@@ -65,8 +65,8 @@
     <Reference Include="CmlLib.Core.Commons, Version=4.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>packages\CmlLib.Core.Commons.4.0.0\lib\netstandard2.0\CmlLib.Core.Commons.dll</HintPath>
     </Reference>
-    <Reference Include="CmlLib.Core.Installer.Forge, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\CmlLib.Core.Installer.Forge.1.0.0\lib\netstandard2.0\CmlLib.Core.Installer.Forge.dll</HintPath>
+    <Reference Include="CmlLib.Core.Installer.Forge, Version=1.1.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\CmlLib.Core.Installer.Forge.1.1.1\lib\netstandard2.0\CmlLib.Core.Installer.Forge.dll</HintPath>
     </Reference>
     <Reference Include="HtmlAgilityPack, Version=1.11.48.0, Culture=neutral, PublicKeyToken=bd319b19eaf3b43a, processorArchitecture=MSIL">
       <HintPath>packages\HtmlAgilityPack.1.11.48\lib\Net45\HtmlAgilityPack.dll</HintPath>

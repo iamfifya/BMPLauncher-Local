@@ -563,6 +563,7 @@ namespace BMPLauncher.Core
                 await Dispatcher.InvokeAsync(() => LogToConsole("🚀 Запуск через CmlLib..."));
 
                 string versionToLaunch = minecraftVersion;
+                bool forgeInstalled = false;
 
                 // 1. Установка Forge (если требуется)
                 if (!string.IsNullOrEmpty(forgeVersion) && forgeVersion.Contains("forge"))
@@ -573,24 +574,39 @@ namespace BMPLauncher.Core
                     {
                         string forgeVersionNumber = forgeVersion.Replace("forge-", "");
                         var forgeInstaller = new CmlLib.Core.Installer.Forge.ForgeInstaller(_minecraftLauncher);
+
+                        // Для версии 1.1.1 используем перегрузку с двумя строковыми параметрами
                         versionToLaunch = await forgeInstaller.Install(minecraftVersion, forgeVersionNumber);
 
+                        forgeInstalled = true;
                         await Dispatcher.InvokeAsync(() => LogToConsole($"✅ Forge установлен: {versionToLaunch}"));
                     }
                     catch (Exception ex)
                     {
                         await Dispatcher.InvokeAsync(() =>
-                            LogToConsole($"❌ ОШИБКА установки Forge: {ex.Message}"));
-                        await Dispatcher.InvokeAsync(() =>
-                            LogToConsole($"Попробуем запустить без Forge, но моды не будут работать!"));
-                        // Не переключаемся на ванильную версию - если Forge не установился, моды не заработают
+                            LogToConsole($"⚠️ Не удалось установить Forge: {ex.Message}"));
                     }
                 }
 
-                // 2. Создаем сессию
+                // 2. Проверяем, установлен ли Forge в системе
+                if (!forgeInstalled)
+                {
+                    // Проверяем, возможно Forge уже установлен ранее
+                    string forgeVersionName = $"forge-{minecraftVersion}-{forgeVersion?.Replace("forge-", "")}";
+                    string forgeVersionDir = Path.Combine(GameDirectory, "versions", forgeVersionName);
+
+                    if (Directory.Exists(forgeVersionDir))
+                    {
+                        versionToLaunch = forgeVersionName;
+                        forgeInstalled = true;
+                        await Dispatcher.InvokeAsync(() => LogToConsole($"✅ Найден ранее установленный Forge: {versionToLaunch}"));
+                    }
+                }
+
+                // 3. Создаем сессию
                 var session = MSession.CreateOfflineSession(playerName);
 
-                // 3. Получаем значения из UI-элементов
+                // 4. Получаем значения из UI-элементов
                 int minRam = 0, maxRam = 0;
                 await Dispatcher.InvokeAsync(() =>
                 {
@@ -598,7 +614,7 @@ namespace BMPLauncher.Core
                     maxRam = ParseRamToMb(GetComboBoxValue(XmxComboBox) ?? "2G");
                 });
 
-                // 4. Инициализируем MLaunchOption
+                // 5. Инициализируем MLaunchOption
                 var launchOption = new MLaunchOption
                 {
                     Session = session,
@@ -610,10 +626,10 @@ namespace BMPLauncher.Core
 
                 await Dispatcher.InvokeAsync(() => LogToConsole("⚙️ Создаем процесс..."));
 
-                // 5. Создаем процесс через лаунчер
+                // 6. Создаем процесс через лаунчер
                 var process = await _minecraftLauncher.CreateProcessAsync(versionToLaunch, launchOption);
 
-                // 6. КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Вручную исправляем аргументы для модпака
+                // 7. Исправляем аргументы для модпака
                 await Dispatcher.InvokeAsync(() => LogToConsole("🔧 Корректируем аргументы для модпака..."));
 
                 // Исправляем gameDir в аргументах
@@ -630,22 +646,15 @@ namespace BMPLauncher.Core
                     process.StartInfo.Arguments += $" {newGameDir}";
                 }
 
-                // Добавляем аргумент для версии Forge если нужно
-                if (versionToLaunch.Contains("forge"))
-                {
-                    process.StartInfo.Arguments += $" --version {versionToLaunch}";
-                }
-
-                // 7. Устанавливаем рабочую директорию
+                // 8. Устанавливаем рабочую директорию
                 process.StartInfo.WorkingDirectory = modpackDir;
 
-                // 8. Отладочное логирование
+                // 9. Отладочное логирование
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    LogToConsole($"🔍 Аргументы процесса: {process.StartInfo.Arguments}");
+                    LogToConsole($"🔍 Версия для запуска: {versionToLaunch}");
                     LogToConsole($"📁 Рабочая директория: {process.StartInfo.WorkingDirectory}");
                     LogToConsole($"☕ Java: {process.StartInfo.FileName}");
-                    LogToConsole($"🎮 Запускаемая версия: {versionToLaunch}");
 
                     // Проверяем пути к модам
                     string modsPath = System.IO.Path.Combine(modpackDir, "mods");
@@ -654,13 +663,37 @@ namespace BMPLauncher.Core
                         int modCount = System.IO.Directory.GetFiles(modsPath, "*.jar").Length;
                         LogToConsole($"📦 Найдено модов: {modCount}");
                     }
+
+                    if (forgeInstalled)
+                    {
+                        LogToConsole($"✅ Запускается с Forge: {versionToLaunch}");
+                        LogToConsole($"   Моды будут загружены!");
+                    }
                     else
                     {
-                        LogToConsole($"⚠️ Папка mods не найдена: {modsPath}");
+                        LogToConsole($"⚠️ Запускается БЕЗ Forge: {versionToLaunch}");
+                        LogToConsole($"   Моды НЕ БУДУТ загружены!");
+                    }
+
+                    // Показываем аргументы без дублирования --version
+                    LogToConsole($"📝 Проверяем аргументы на дублирование...");
+
+                    // Проверяем, сколько раз встречается --version
+                    int versionCount = CountOccurrences(process.StartInfo.Arguments, "--version");
+                    LogToConsole($"🔢 Аргумент --version встречается: {versionCount} раз");
+
+                    if (versionCount > 1)
+                    {
+                        LogToConsole($"⚠️ ВНИМАНИЕ: Найдено дублирование аргумента --version!");
+                        LogToConsole($"   Удаляем дубликаты...");
+
+                        // Удаляем дубликаты --version
+                        process.StartInfo.Arguments = RemoveDuplicateVersionArgs(process.StartInfo.Arguments);
+                        LogToConsole($"✅ Аргументы исправлены");
                     }
                 });
 
-                // 9. Настраиваем перехват вывода
+                // 10. Настраиваем перехват вывода
                 process.StartInfo.RedirectStandardOutput = true;
                 process.StartInfo.RedirectStandardError = true;
                 process.StartInfo.UseShellExecute = false;
@@ -682,7 +715,7 @@ namespace BMPLauncher.Core
                     }
                 };
 
-                // 10. Запускаем процесс
+                // 11. Запускаем процесс
                 process.Start();
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
@@ -690,13 +723,9 @@ namespace BMPLauncher.Core
                 await Dispatcher.InvokeAsync(() =>
                 {
                     LogToConsole($"✅ Игра запущена! PID: {process.Id}");
-                    LogToConsole($"⚠️ ВНИМАНИЕ: Если моды не загружаются, проверьте:");
-                    LogToConsole($"   1. Установлен ли Forge версии {forgeVersion}");
-                    LogToConsole($"   2. Находится ли папка mods в: {modpackDir}\\mods");
-                    LogToConsole($"   3. Совместимы ли моды с версией {minecraftVersion}");
                 });
 
-                // 11. Фоновое отслеживание
+                // 12. Фоновое отслеживание
                 _ = Task.Run(async () =>
                 {
                     await Task.Delay(5000);
@@ -709,9 +738,9 @@ namespace BMPLauncher.Core
                             if (process.ExitCode != 0)
                             {
                                 LogToConsole($"❌ Возможные проблемы:");
-                                LogToConsole($"   - Не установлен Forge");
-                                LogToConsole($"   - Несовместимая версия Java");
-                                LogToConsole($"   - Отсутствуют библиотеки");
+                                LogToConsole($"   - Дублирование аргументов");
+                                LogToConsole($"   - Несовместимые моды");
+                                LogToConsole($"   - Проблемы с Forge");
                             }
                         });
                     }
@@ -753,6 +782,53 @@ namespace BMPLauncher.Core
                 });
                 throw;
             }
+        }
+
+        // Вспомогательные методы для работы с аргументами
+        private int CountOccurrences(string source, string pattern)
+        {
+            int count = 0;
+            int i = 0;
+            while ((i = source.IndexOf(pattern, i, StringComparison.Ordinal)) != -1)
+            {
+                i += pattern.Length;
+                count++;
+            }
+            return count;
+        }
+
+        private string RemoveDuplicateVersionArgs(string arguments)
+        {
+            var argsList = arguments.Split(' ').ToList();
+            var result = new List<string>();
+            bool versionFound = false;
+
+            for (int i = 0; i < argsList.Count; i++)
+            {
+                if (argsList[i] == "--version")
+                {
+                    if (!versionFound)
+                    {
+                        result.Add(argsList[i]);
+                        if (i + 1 < argsList.Count)
+                        {
+                            result.Add(argsList[i + 1]);
+                            i++; // Пропускаем значение версии
+                        }
+                        versionFound = true;
+                    }
+                    else
+                    {
+                        i++; // Пропускаем дублированный аргумент и его значение
+                    }
+                }
+                else
+                {
+                    result.Add(argsList[i]);
+                }
+            }
+
+            return string.Join(" ", result);
         }
 
         private int ParseRamToMb(string ramString)
