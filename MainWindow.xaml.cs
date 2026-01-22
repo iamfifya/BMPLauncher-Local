@@ -32,7 +32,6 @@ namespace BMPLauncher.Core
         // Переменные состояния
         private string BaseDirectory; // Добавлено
         private string GameDirectory;
-        private VersionManifest _versionManifest;
         private JavaInfo _currentJavaInfo;
         private string _currentAccessToken;
         private HttpListener _httpListener;
@@ -43,9 +42,7 @@ namespace BMPLauncher.Core
         private CFModpack _selectedModpack;
         private CancellationTokenSource _cancellationTokenSource;
         private bool _isClosing = false;
-        private readonly Action<string> _logAction;
 
-        private ForgeInstaller _forgeInstaller;
         private GameLauncher _gameLauncher;
 
         private MinecraftLauncher _cmlLauncher;
@@ -524,18 +521,21 @@ namespace BMPLauncher.Core
         {
             try
             {
-                // Блокируем кнопку на время запуска
                 LaunchButton.IsEnabled = false;
-                StatusText.Text = "Запуск игры...";
+                StatusText.Text = "Подготовка...";
 
-                LogToConsole("=== ЗАПУСК ИГРЫ ===");
+                LogToConsole("=== ЗАПУСК ЧЕРЕЗ CMLIB ===");
 
-                // 1. Проверяем выбор модпака
+                // 1. Проверки
                 if (_selectedModpack == null)
                 {
-                    MessageBox.Show("Выберите модпак из списка!");
+                    MessageBox.Show("Выберите модпак!");
                     return;
                 }
+
+                string playerName = PlayerNameTextBox.Text.Trim();
+                if (string.IsNullOrEmpty(playerName))
+                    playerName = "Player";
 
                 // 2. Получаем путь к модпаку
                 string sanitizedModpackName = SanitizeFileName(_selectedModpack.Name);
@@ -543,83 +543,69 @@ namespace BMPLauncher.Core
 
                 if (!Directory.Exists(modpackDir))
                 {
-                    MessageBox.Show($"Модпак '{_selectedModpack.Name}' не установлен!\n\n" +
-                                  "Сначала нажмите кнопку 'Установить'.",
-                                  "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show($"Модпак не установлен!\nПуть: {modpackDir}", "Ошибка");
                     return;
                 }
 
-                // 3. Читаем manifest.json
+                // 3. Читаем manifest
                 string manifestPath = Path.Combine(modpackDir, "manifest.json");
                 if (!File.Exists(manifestPath))
                 {
-                    MessageBox.Show("Файл manifest.json не найден!\n" +
-                                  "Модпак установлен неправильно.",
-                                  "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show("manifest.json не найден!", "Ошибка");
                     return;
                 }
 
                 var manifest = JsonConvert.DeserializeObject<CFManifest>(File.ReadAllText(manifestPath));
+                string minecraftVersion = manifest.Minecraft.Version;
+                string forgeVersion = manifest.Minecraft.ModLoaders?.FirstOrDefault()?.Id;
 
-                LogToConsole($"📋 Модпак: {_selectedModpack.Name}");
-                LogToConsole($"🎮 Minecraft: {manifest.Minecraft.Version}");
-                LogToConsole($"🔨 Forge: {manifest.Minecraft.ModLoaders?.FirstOrDefault()?.Id ?? "Нет"}");
+                LogToConsole($"🎮 Minecraft: {minecraftVersion}");
+                LogToConsole($"🔨 Forge: {forgeVersion ?? "Нет"}");
 
-                // 4. Получаем Java путь
+                // 4. Находим Java
                 string javaPath = await GetJavaPathAsync();
                 if (string.IsNullOrEmpty(javaPath))
                 {
-                    MessageBox.Show("Java не найдена!\n\n" +
-                                  "1. Установите Java 8 или новее\n" +
-                                  "2. Укажите путь в настройках\n" +
-                                  "3. Или установите переменную окружения JAVA_HOME",
-                                  "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show("Java не найдена!", "Ошибка");
                     return;
                 }
 
-                // 5. Получаем имя игрока
-                string playerName = string.IsNullOrWhiteSpace(PlayerNameTextBox.Text)
-                    ? "Player_" + Guid.NewGuid().ToString().Substring(0, 5)
-                    : PlayerNameTextBox.Text;
-
-                // 6. Получаем настройки RAM
+                // 5. Получаем настройки RAM
                 int minRam = ParseRamToMb(GetSelectedComboBoxValue(XmsComboBox) ?? "1G");
                 int maxRam = ParseRamToMb(GetSelectedComboBoxValue(XmxComboBox) ?? "2G");
 
-                // 7. Получаем аргументы Java
-                string javaArgs = JavaArgsTextBox.Text?.Trim() ?? "";
+                // 6. Запускаем через GameLauncher
+                LogToConsole($"⚙️ Подготавливаем запуск...");
 
-                // 8. Запускаем через GameLauncher
                 var process = await _gameLauncher.LaunchModpackAsync(
                     modpackDir: modpackDir,
-                    minecraftVersion: manifest.Minecraft.Version,
-                    forgeVersion: manifest.Minecraft.ModLoaders?.FirstOrDefault()?.Id,
+                    minecraftVersion: minecraftVersion,
+                    forgeVersion: forgeVersion,
                     javaPath: javaPath,
                     playerName: playerName,
                     minRamMb: minRam,
                     maxRamMb: maxRam,
-                    javaArgs: javaArgs
+                    javaArgs: JavaArgsTextBox.Text?.Trim() ?? ""
                 );
 
-                // 9. Запускаем процесс
+                // 7. Запускаем процесс
+                LogToConsole($"🎮 Запускаем процесс...");
+
                 process.Start();
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 
                 LogToConsole($"✅ Игра запущена! PID: {process.Id}");
+                StatusText.Text = "Игра запущена";
 
-                // Сообщение об успехе
-                MessageBox.Show($"Игра успешно запущена!\n\n" +
-                               $"PID: {process.Id}\n" +
-                               $"Игрок: {playerName}\n" +
-                               $"RAM: {minRam / 1024}G - {maxRam / 1024}G\n\n" +
-                               "Консоль игры будет отображаться ниже.",
+                MessageBox.Show($"Игра запущена успешно!\nPID: {process.Id}\n\n" +
+                               "Консоль игры будет отображаться внизу окна лаунчера.",
                                "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                // 10. Следим за завершением игры в фоне
+                // 8. Следим за завершением в фоне
                 _ = Task.Run(async () =>
                 {
-                    await Task.Delay(5000); // Ждем 5 секунд для инициализации
+                    await Task.Delay(3000); // Ждем 3 секунды для инициализации
 
                     if (process.HasExited)
                     {
@@ -634,7 +620,6 @@ namespace BMPLauncher.Core
                         Dispatcher.Invoke(() =>
                         {
                             LogToConsole($"🎮 Игра работает (PID: {process.Id})");
-                            StatusText.Text = "Игра запущена";
                         });
 
                         await process.WaitForExitAsync();
@@ -648,18 +633,29 @@ namespace BMPLauncher.Core
             }
             catch (Exception ex)
             {
-                LogToConsole($"❌ Ошибка: {ex.Message}");
+                LogToConsole($"❌ Ошибка запуска: {ex.Message}");
                 if (ex.InnerException != null)
-                    LogToConsole($"Подробности: {ex.InnerException.Message}");
+                {
+                    LogToConsole($"Детали: {ex.InnerException.Message}");
+                }
 
                 MessageBox.Show($"Ошибка запуска: {ex.Message}",
                               "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Ошибка";
             }
             finally
             {
                 LaunchButton.IsEnabled = true;
-                StatusText.Text = "Готов";
             }
+        }
+
+        // Вспомогательный метод для получения значения из ComboBox
+        private string GetSelectedComboBoxValue(ComboBox comboBox)
+        {
+            if (comboBox.SelectedItem is ComboBoxItem item)
+                return item.Content?.ToString();
+
+            return comboBox.Text;
         }
         private async Task<string> GetJavaPathAsync()
         {
@@ -681,12 +677,11 @@ namespace BMPLauncher.Core
             // 3. Пробуем стандартные пути
             string[] commonPaths =
             {
-                @"D:\Program Files\Java\jre1.8.0_431\bin\java.exe",
-                @"C:\Program Files\Java\jre1.8.0_431\bin\java.exe",
-                @"C:\Program Files (x86)\Java\jre1.8.0_431\bin\java.exe",
-                @"C:\Program Files\Java\jdk1.8.0_431\bin\java.exe",
-                @"java.exe" // Пробуем из PATH
-            };
+        @"D:\Program Files\Java\jre1.8.0_431\bin\java.exe",
+        @"C:\Program Files\Java\jre1.8.0_431\bin\java.exe",
+        @"C:\Program Files (x86)\Java\jre1.8.0_431\bin\java.exe",
+        @"C:\Program Files\Java\jdk1.8.0_431\bin\java.exe"
+    };
 
             foreach (var path in commonPaths)
             {
@@ -698,7 +693,33 @@ namespace BMPLauncher.Core
                 }
             }
 
-            return null;
+            // 4. Пробуем через PATH
+            try
+            {
+                var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "java",
+                        Arguments = "-version",
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+
+                process.Start();
+                await process.WaitForExitAsync();
+
+                // Если java найдена в PATH
+                _settings.JavaPath = "java";
+                _settings.Save();
+                return "java";
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private int ParseRamToMb(string ramString)
@@ -727,15 +748,6 @@ namespace BMPLauncher.Core
 
             return 1024; // 1GB по умолчанию
         }
-
-        private string GetSelectedComboBoxValue(ComboBox comboBox)
-        {
-            if (comboBox.SelectedItem is ComboBoxItem item)
-                return item.Content?.ToString();
-
-            return comboBox.Text;
-        }
-
 
         // Вспомогательный метод для логов
         private void AttachProcessLogger(Process process)

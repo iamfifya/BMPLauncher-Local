@@ -15,6 +15,7 @@ namespace BMPLauncher.Core
         private readonly string _gameDirectory;
         private readonly Action<string> _logAction;
         private MinecraftLauncher _launcher;
+        private MinecraftPath _minecraftPath;
 
         public GameLauncher(string gameDirectory, Action<string> logAction)
         {
@@ -25,13 +26,16 @@ namespace BMPLauncher.Core
 
         private void Initialize()
         {
-            var path = new MinecraftPath(_gameDirectory);
-            _launcher = new MinecraftLauncher(path);
+            _minecraftPath = new MinecraftPath(_gameDirectory);
+            _launcher = new MinecraftLauncher(_minecraftPath);
 
-            // Настраиваем события прогресса
-            _launcher.FileProgressChanged += (sender, e) =>
+            // Настраиваем прогресс (правильное событие для версии 4.0.6)
+            _launcher.ProgressChanged += (sender, e) =>
             {
-                _logAction?.Invoke($"Загрузка файлов: {e.ProgressedTasks}/{e.TotalTasks}");
+                if (e is DownloadFileChangedEventArgs downloadArgs)
+                {
+                    _logAction?.Invoke($"Загрузка: {downloadArgs.FileName} ({downloadArgs.ProgressPercentage}%)");
+                }
             };
         }
 
@@ -55,24 +59,30 @@ namespace BMPLauncher.Core
                 // Создаем сессию
                 var session = MSession.CreateOfflineSession(playerName);
 
-                // Создаем опции запуска
+                // Создаем опции запуска (правильные для 4.0.6)
                 var launchOption = new MLaunchOption
                 {
                     Session = session,
                     MaximumRamMb = maxRamMb,
                     MinimumRamMb = minRamMb,
-                    Path = new MinecraftPath(_gameDirectory),
-                    JavaPath = javaPath
+                    Path = _minecraftPath
                 };
 
-                // Устанавливаем рабочую директорию (GameDirectory)
-                launchOption.StartOption.WorkingDirectory = modpackDir;
+                // Устанавливаем Java путь если указан
+                if (!string.IsNullOrEmpty(javaPath) && File.Exists(javaPath))
+                {
+                    launchOption.JavaPath = javaPath;
+                }
 
-                // Добавляем аргументы Java
+                // Добавляем дополнительные аргументы Java
                 if (!string.IsNullOrEmpty(javaArgs))
                 {
+                    // В 4.0.6 дополнительные аргументы добавляются через StartOption
                     launchOption.StartOption.AdditionalJavaArguments = javaArgs;
                 }
+
+                // Устанавливаем рабочую директорию (GameDirectory) - это важно!
+                launchOption.StartOption.WorkingDirectory = modpackDir;
 
                 _logAction?.Invoke($"⚙️ Создаем процесс для версии: {versionName}");
 
@@ -88,9 +98,11 @@ namespace BMPLauncher.Core
             }
             catch (Exception ex)
             {
-                _logAction?.Invoke($"❌ Ошибка: {ex.Message}");
+                _logAction?.Invoke($"❌ Ошибка запуска: {ex.Message}");
                 if (ex.InnerException != null)
-                    _logAction?.Invoke($"Подробности: {ex.InnerException.Message}");
+                {
+                    _logAction?.Invoke($"Детали: {ex.InnerException.Message}");
+                }
                 throw;
             }
         }
@@ -116,6 +128,7 @@ namespace BMPLauncher.Core
                         versionName = await forgeInstaller.Install(minecraftVersion, forgeVersionNumber);
                     }
 
+                    _logAction?.Invoke($"✅ Forge готов: {versionName}");
                     return versionName;
                 }
                 catch (Exception ex)
