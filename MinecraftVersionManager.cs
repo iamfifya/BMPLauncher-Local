@@ -290,7 +290,7 @@ namespace BMPLauncher.Core
                 {
                     throw;
                 }
-                catch (Exception ex) when (retry < maxRetries - 1)
+                catch (Exception) when (retry < maxRetries - 1)
                 {
                     _logAction($"Повторная попытка {retry + 1}/{maxRetries} для {Path.GetFileName(download.Path)}");
                     await Task.Delay(1000 * (retry + 1), cancellationToken);
