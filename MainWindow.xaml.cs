@@ -210,7 +210,12 @@ namespace BMPLauncher.Core
                 {
                     LogToConsole("Инициализация менеджеров...");
                     _versionDownloader = new VersionDownloader(GameDirectory, LogToConsole);
-                    _modpackDownloader = new ModpackDownloader(GameDirectory, LogToConsole);
+                    
+                    // Получаем API ключ из настроек (теперь он всегда есть по умолчанию)
+                    string apiKey = _settings?.CurseForgeApiKey;
+                    LogToConsole($"API ключ CurseForge: {(string.IsNullOrEmpty(apiKey) ? "не настроен" : "загружен из настроек")}");
+                    
+                    _modpackDownloader = new ModpackDownloader(GameDirectory, LogToConsole, apiKey);
                     LogToConsole("Менеджеры инициализированы");
                 }
                 catch (Exception ex)
@@ -279,24 +284,24 @@ namespace BMPLauncher.Core
             {
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    StatusText.Text = "Загрузка модпаков TheBarMaxx...";
+                    StatusText.Text = "Загрузка модпаков BMProjects...";
                 });
 
-                await _modpackDownloader.LoadTheBarMaxxModpacks();
+                await _modpackDownloader.LoadBMProjectsModpacks();
                 _availableModpacks = _modpackDownloader.GetAvailableModpacks();
 
                 await Dispatcher.InvokeAsync(() =>
                 {
                     ModpacksListBox.ItemsSource = _availableModpacks;
-                    ModpackCountText.Text = $"({_availableModpacks.Count} модпаков TheBarMaxx)";
+                    ModpackCountText.Text = $"({_availableModpacks.Count} модпаков BMProjects)";
 
                     if (_availableModpacks.Count == 0)
                     {
-                        LogToConsole("⚠️ Не загружены модпаки TheBarMaxx");
+                        LogToConsole("⚠️ Не загружены модпаки BMProjects");
                     }
                     else
                     {
-                        LogToConsole($"✅ Загружено {_availableModpacks.Count} модпаков TheBarMaxx");
+                        LogToConsole($"✅ Загружено {_availableModpacks.Count} модпаков BMProjects");
                     }
 
                     ModpacksLoaded = true;

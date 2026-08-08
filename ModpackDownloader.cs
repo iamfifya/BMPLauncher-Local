@@ -16,22 +16,25 @@ namespace BMPLauncher.Core
         private readonly Action<string> _logAction;
         private readonly HttpClient _httpClient;
         private List<CFModpack> _availableModpacks = new List<CFModpack>();
-        
-        // CurseForge API Key - замените на ваш актуальный ключ
-        // Получите ключ на https://console.curseforge.com/
-        private const string CF_API_KEY = "$2a$10$U5VxQZJ8vGz7KqJX9YqR8e.qW3vZ5xN8yH4jK2mL6pO9rS1tU3vW5";
+        private readonly string _apiKey;
 
-        public ModpackDownloader(string gameDirectory, Action<string> logAction)
+        public ModpackDownloader(string gameDirectory, Action<string> logAction, string apiKey = null)
         {
             _gameDirectory = gameDirectory;
             _logAction = logAction;
+            _apiKey = apiKey;
             _httpClient = new HttpClient();
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
-            _httpClient.DefaultRequestHeaders.Add("X-API-Key", CF_API_KEY);
+            
+            // Используем переданный API ключ или пустую строку
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                _httpClient.DefaultRequestHeaders.Add("X-API-Key", apiKey);
+            }
         }
 
-        // Словарь с модпаками
-        private static readonly Dictionary<int, CFModpack> _theBarMaxxModpacks = new Dictionary<int, CFModpack>()
+        // Словарь с модпаками BMProjects
+        private static readonly Dictionary<int, CFModpack> _bmProjectsModpacks = new Dictionary<int, CFModpack>()
     {
         {
             715304, // Gloomy Rise [FORGE]
@@ -39,12 +42,12 @@ namespace BMPLauncher.Core
             {
                 Id = 715304,
                 Name = "Gloomy Rise [FORGE]",
-                Description = "Модпак TheBarMaxx",
+                Description = "Модпак от BMProjects",
                 DownloadCount = 50000,
                 DateModified = new DateTime(2024, 1, 1),
                 Authors = new List<CFAuthor>
                 {
-                    new CFAuthor { Name = "TheBarMaxx", Url = "" }
+                    new CFAuthor { Name = "BMProjects", Url = "" }
                 },
                 GameVersionLatestFiles = new List<CFGameVersionFile>
                 {
@@ -59,12 +62,12 @@ namespace BMPLauncher.Core
         }
     };
 
-        public async Task LoadTheBarMaxxModpacks()
+        public async Task LoadBMProjectsModpacks()
         {
             try
             {
-                _logAction("Загрузка модпаков TheBarMaxx...");
-                _availableModpacks = new List<CFModpack>(_theBarMaxxModpacks.Values);
+                _logAction("Загрузка модпаков BMProjects...");
+                _availableModpacks = new List<CFModpack>(_bmProjectsModpacks.Values);
                 _logAction($"Загружено {_availableModpacks.Count} модпаков");
             }
             catch (Exception ex)
@@ -91,7 +94,7 @@ namespace BMPLauncher.Core
 
                 // Получаем информацию о модпаке
                 CFModpack modpackInfo;
-                if (!_theBarMaxxModpacks.TryGetValue(modpackId, out modpackInfo))
+                if (!_bmProjectsModpacks.TryGetValue(modpackId, out modpackInfo))
                 {
                     throw new Exception($"Модпак с ID {modpackId} не найден");
                 }
@@ -178,7 +181,12 @@ namespace BMPLauncher.Core
                 using (var httpClient = new HttpClient())
                 {
                     httpClient.Timeout = TimeSpan.FromSeconds(60);
-                    httpClient.DefaultRequestHeaders.Add("X-API-Key", CF_API_KEY);
+                    
+                    // Используем API ключ из поля
+                    if (!string.IsNullOrEmpty(_apiKey))
+                    {
+                        httpClient.DefaultRequestHeaders.Add("X-API-Key", _apiKey);
+                    }
 
                     using (var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                     {
@@ -364,7 +372,12 @@ namespace BMPLauncher.Core
                     using (var httpClient = new HttpClient())
                     {
                         httpClient.Timeout = TimeSpan.FromSeconds(30);
-                        httpClient.DefaultRequestHeaders.Add("X-API-Key", CF_API_KEY);
+                        
+                        // Используем API ключ из поля
+                        if (!string.IsNullOrEmpty(_apiKey))
+                        {
+                            httpClient.DefaultRequestHeaders.Add("X-API-Key", _apiKey);
+                        }
 
                         using (var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                         {

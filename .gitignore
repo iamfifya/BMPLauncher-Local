@@ -1,1 +1,23 @@
-Nothing needs to be added to .gitignore since only a single source code file (ModpackDownloader.cs) was modified and no build artifacts, dependencies, or temporary files were included in the changes.
+```
+# Build artifacts
+*.obj
+*.exe
+*.dll
+*.pdb
+*.userprefs
+*.cache
+*.tmp
+
+# Dependencies
+packages/
+bin/
+obj/
+
+# Logs
+*.log
+
+# User-specific files
+.vs/
+*.user
+*.suo
+```
