@@ -16,6 +16,10 @@ namespace BMPLauncher.Core
         private readonly Action<string> _logAction;
         private readonly HttpClient _httpClient;
         private List<CFModpack> _availableModpacks = new List<CFModpack>();
+        
+        // CurseForge API Key - замените на ваш актуальный ключ
+        // Получите ключ на https://console.curseforge.com/
+        private const string CF_API_KEY = "$2a$10$U5VxQZJ8vGz7KqJX9YqR8e.qW3vZ5xN8yH4jK2mL6pO9rS1tU3vW5";
 
         public ModpackDownloader(string gameDirectory, Action<string> logAction)
         {
@@ -23,6 +27,7 @@ namespace BMPLauncher.Core
             _logAction = logAction;
             _httpClient = new HttpClient();
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
+            _httpClient.DefaultRequestHeaders.Add("X-API-Key", CF_API_KEY);
         }
 
         // Словарь с модпаками
@@ -97,7 +102,7 @@ namespace BMPLauncher.Core
                 int fileId = fileInfo.ProjectFileId;
 
                 // 1. Скачиваем архив модпака (10% прогресса)
-                string downloadUrl = $"https://curseforge.com/api/v1/mods/{modpackId}/files/{fileId}/download";
+                string downloadUrl = $"https://api.curseforge.com/v1/mods/{modpackId}/files/{fileId}/download";
                 _logAction($"Скачиваем архив модпака: {downloadUrl}");
 
                 string tempDir = Path.Combine(Path.GetTempPath(), "BMPLauncher");
@@ -173,6 +178,7 @@ namespace BMPLauncher.Core
                 using (var httpClient = new HttpClient())
                 {
                     httpClient.Timeout = TimeSpan.FromSeconds(60);
+                    httpClient.DefaultRequestHeaders.Add("X-API-Key", CF_API_KEY);
 
                     using (var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                     {
@@ -291,7 +297,7 @@ namespace BMPLauncher.Core
                     await semaphore.WaitAsync(cancellationToken);
                     try
                     {
-                        string modUrl = $"https://curseforge.com/api/v1/mods/{modFile.ProjectId}/files/{modFile.FileId}/download";
+                        string modUrl = $"https://api.curseforge.com/v1/mods/{modFile.ProjectId}/files/{modFile.FileId}/download";
                         string modFileName = $"{modFile.ProjectId}_{modFile.FileId}.jar";
                         string modPath = Path.Combine(modsDir, modFileName);
 
@@ -358,6 +364,7 @@ namespace BMPLauncher.Core
                     using (var httpClient = new HttpClient())
                     {
                         httpClient.Timeout = TimeSpan.FromSeconds(30);
+                        httpClient.DefaultRequestHeaders.Add("X-API-Key", CF_API_KEY);
 
                         using (var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                         {
