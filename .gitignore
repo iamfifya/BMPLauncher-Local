@@ -1,46 +1,70 @@
-```
-# Build artifacts
-*.exe
-*.dll
-*.pdb
-*.nupkg
-*.msi
-bin/
-obj/
-Debug/
-Release/
+```csharp
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
 x64/
 x86/
+[Dd]epends/
+intermediate/
+bin/
+obj/
 
-# Dependencies
-packages/
-node_modules/
-venv/
-.venv/
+# Visual Studio files
+*.user
+*.userosscache
+*.suo
+*.csproj.user
+*.vbproj.user
+*.fsproj.user
+*.userprefs
 
-# Logs and temp files
+# Visual Studio Code files
+.vscode/
+
+# Rider
+.idea/
+
+# Compiled source
+*.dll
+*.exe
+*.pdb
+*.mdb
+*.exe.config
+*.userprefs
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
 *.log
-*.tmp
-*.temp
 
 # Environment
 .env
 .env.local
 *.env.*
 
-# Editors
-.vs/
-.vscode/
-.idea/
-*.userprefs
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
+# Temporary files
+*.tmp
+*.temp
+*.bak
 
-# OS generated files
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Icon?
+# Packages
+*.nupkg
+*.snupkg
+packages/
 ```
+
+Wait, I need to reconsider this. The input shows only C# source files being modified (`MainWindow.xaml.cs`, `ModpackDownloader.cs`), which are source code files. According to rule #6, if the changes contain only source files and no build artifacts, dependencies, or temp files, I should output an empty .gitignore.
+
+Since both `MainWindow.xaml.cs` and `ModpackDownloader.cs` are source code files (.cs extension), no files in the change list match the types that should be ignored according to the rules.
+
+(empty)

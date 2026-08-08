@@ -289,16 +289,16 @@ namespace BMPLauncher.Core
 
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    ModpacksListBox.ItemsSource = _availableModpacks;
-                    ModpackCountText.Text = $"({_availableModpacks.Count} модпаков BMProjects)";
+                    ModpacksListBox.ItemsSource = _modpackDownloader.BMProjectsModpacks;
+                    ModpackCountText.Text = $"({_modpackDownloader.BMProjectsModpacks.Count} модпаков BMProjects)";
 
-                    if (_availableModpacks.Count == 0)
+                    if (_modpackDownloader.BMProjectsModpacks.Count == 0)
                     {
                         LogToConsole("⚠️ Не загружены модпаки BMProjects");
                     }
                     else
                     {
-                        LogToConsole($"✅ Загружено {_availableModpacks.Count} модпаков BMProjects");
+                        LogToConsole($"✅ Загружено {_modpackDownloader.BMProjectsModpacks.Count} модпаков BMProjects");
                     }
 
                     ModpacksLoaded = true;
@@ -334,12 +334,12 @@ namespace BMPLauncher.Core
             {
                 if (string.IsNullOrWhiteSpace(query))
                 {
-                    ModpacksListBox.ItemsSource = _availableModpacks;
-                    ModpackCountText.Text = $"({_availableModpacks.Count} модпаков)";
+                    ModpacksListBox.ItemsSource = _modpackDownloader.BMProjectsModpacks;
+                    ModpackCountText.Text = $"({_modpackDownloader.BMProjectsModpacks.Count} модпаков BMProjects)";
                     return;
                 }
 
-                var filtered = _availableModpacks
+                var filtered = _modpackDownloader.BMProjectsModpacks
                     .Where(m => m.Name?.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
                                m.Description?.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
                     .ToList();
