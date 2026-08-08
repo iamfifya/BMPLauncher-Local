@@ -42,7 +42,6 @@ namespace BMPLauncher.Core
         private CFModpack _selectedModpack;
         private CancellationTokenSource _cancellationTokenSource;
         private bool _isClosing = false;
-        private readonly Action<string> _logAction;
 
         // Менеджеры
         private VersionDownloader _versionDownloader;
@@ -317,14 +316,16 @@ namespace BMPLauncher.Core
 
         private void SearchModpacksButton_Click(object sender, RoutedEventArgs e)
         {
-            Task.Run(() => SearchModpacks(SearchModpackTextBox.Text));
+            string query = SearchModpackTextBox.Text;
+            Task.Run(() => SearchModpacks(query));
         }
 
         private void SearchModpackTextBox_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
-                Task.Run(() => SearchModpacks(SearchModpackTextBox.Text));
+                string query = SearchModpackTextBox.Text;
+                Task.Run(() => SearchModpacks(query));
             }
         }
 
