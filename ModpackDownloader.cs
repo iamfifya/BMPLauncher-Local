@@ -82,6 +82,11 @@ namespace BMPLauncher.Core
             return _availableModpacks;
         }
 
+        public List<CFModpack> BMProjectsModpacks
+        {
+            get { return _bmProjectsModpacks.Values.ToList(); }
+        }
+
         // Основной метод установки модпака
         public async Task DownloadModpackAsync(int modpackId, string installDir,
     Action<double> progressCallback, CancellationToken cancellationToken)
