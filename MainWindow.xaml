@@ -156,7 +156,7 @@
 
                     <!-- Заголовок модпаков -->
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                        <TextBlock Text="МОДПАКИ THEBARMAXX" FontWeight="Bold" 
+                        <TextBlock Text="МОДПАКИ BMPROJECTS" FontWeight="Bold" 
                                    FontSize="16" Foreground="White"/>
                         <TextBlock x:Name="ModpackCountText" Text="(загрузка...)" FontSize="12" 
                                    Foreground="#FFCCCCCC" Margin="10,3,0,0"/>
