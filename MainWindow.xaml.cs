@@ -32,7 +32,6 @@ namespace BMPLauncher.Core
         // Переменные состояния
         private string BaseDirectory;
         private string GameDirectory;
-        private VersionManifest _versionManifest;
         private JavaInfo _currentJavaInfo;
         private string _currentAccessToken;
         private HttpListener _httpListener;
@@ -44,8 +43,6 @@ namespace BMPLauncher.Core
         private CancellationTokenSource _cancellationTokenSource;
         private bool _isClosing = false;
         private readonly Action<string> _logAction;
-
-        private ForgeInstaller _forgeInstaller;
 
         // Менеджеры
         private VersionDownloader _versionDownloader;
